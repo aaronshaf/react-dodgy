@@ -5,14 +5,7 @@ import Player from './Player'
 import Enemy from './Enemy'
 import DebugState from './DebugState'
 import { UP, DOWN, LEFT, RIGHT } from './constants'
-import { pluck } from './utils'
-
-/*
-    Since my api key is not publicly available,
-    cloned versions will lack the ability to post
-    new high scores.
-*/
-// import url from 'api';
+import { pluck, getProximities } from './utils'
 
 const getDefaultState = ({ boardSize, playerSize, highScore = 0 }) => {
   const half = Math.floor(boardSize / 2) * playerSize
@@ -42,14 +35,23 @@ const getDefaultState = ({ boardSize, playerSize, highScore = 0 }) => {
 export default class Game extends Component {
   constructor(props) {
     super(props)
-    const half = Math.floor(props.boardSize / 2) * props.playerSize
     const { boardSize, playerSize } = props
     this.state = getDefaultState({ boardSize, playerSize })
   }
 
+  componentDidMount() {
+    this.startGame()
+    this.fetchGlobalHighScore()
+  }
+
+  componentWillUnmount() {
+    clearInterval(this.state.gameInterval)
+    clearInterval(this.state.enemyInterval)
+    clearInterval(this.state.timeInterval)
+  }
+
   placeEnemy = () => {
     // enemies always launch at player
-    const { player, maxDim } = this.state.size
     const { player: playerPos } = this.state.positions
 
     // assign to a random side
@@ -162,6 +164,15 @@ export default class Game extends Component {
       positions: { enemies },
       size: { player, maxDim }
     } = this.state
+    const playerSize = this.state.size.player
+    const playerPosition = this.state.positions.player
+
+    const proximities = getProximities(
+      enemies,
+      playerPosition,
+      maxDim,
+      playerSize
+    )
 
     this.setState({
       positions: {
@@ -331,7 +342,7 @@ export default class Game extends Component {
             />
           ))}
         </Board>
-        {false && (
+        {true && (
           <p style={{ position: 'fixed', bottom: 0, left: 16 }}>
             Debug:{' '}
             <input
@@ -344,16 +355,5 @@ export default class Game extends Component {
         {this.state.debug && <DebugState data={this.state} />}
       </div>
     )
-  }
-
-  componentDidMount() {
-    this.startGame()
-    this.fetchGlobalHighScore()
-  }
-
-  componentWillUnmount() {
-    clearInterval(this.state.gameInterval)
-    clearInterval(this.state.enemyInterval)
-    clearInterval(this.state.timeInterval)
   }
 }

@@ -1,4 +1,4 @@
-import React, { Component, PropTypes } from 'react'
+import React, { Component } from 'react'
 import Square from './Square'
 import { UP, DOWN, LEFT, RIGHT } from './constants'
 
