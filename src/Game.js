@@ -10,13 +10,15 @@ import neataptic from 'neataptic'
 import max from 'lodash/max'
 import chunk from 'lodash/chunk'
 import uuid from 'uuid'
+import { ckmeans } from 'simple-statistics'
 
 const AsyncComponent = React.unstable_AsyncComponent
 
-const INITIAL_GAME_SPEED = 0.001
-const PLAYER_AMOUNT = 100
-const MUTATION_RATE = 0.05
-const ELITISM_PERCENT = 0.05
+const PLAYER_AMOUNT = 20
+const INITIAL_GAME_SPEED = 0.0001
+const MUTATION_RATE = 0.25
+const ELITISM_PERCENT = 0.1
+// let MINIMUM_VARIANCE = 0.000001
 
 const getDefaultState = ({ boardSize, playerSize, highScore = 0 }) => {
   const half = Math.floor(boardSize / 2) * playerSize
@@ -54,12 +56,13 @@ export default class Game extends Component {
       currentNetworkIndex: 0,
       gameSpeed: INITIAL_GAME_SPEED
     }
-    this.neatNetwork = new neataptic.Neat(8, 4, this.getFitness, {
+    this.neatNetwork = new neataptic.Neat(12, 4, this.getFitness, {
       popsize: PLAYER_AMOUNT,
       mutationRate: MUTATION_RATE,
-      elitism: Math.round(ELITISM_PERCENT * PLAYER_AMOUNT)
+      elitism: Math.round(ELITISM_PERCENT * PLAYER_AMOUNT),
+      selection: neataptic.methods.selection.FITNESS_PROPORTIONATE
+      // equal: true
     })
-    // localStorage.clear()
     if (localStorage.storedNeatNetwork) {
       try {
         const json = JSON.parse(localStorage.storedNeatNetwork)
@@ -156,10 +159,14 @@ export default class Game extends Component {
       this.props.boardSize
     )
     const input = [
-      proximities.leftDanger,
-      proximities.topDanger,
-      proximities.rightDanger,
-      proximities.bottomDanger,
+      proximities.directLeftDanger,
+      proximities.directTopDanger,
+      proximities.directRightDanger,
+      proximities.directBottomDanger,
+      proximities.indirectLeftDanger,
+      proximities.indirectTopDanger,
+      proximities.indirectRightDanger,
+      proximities.indirectBottomDanger,
       proximities.leftWallProximity,
       proximities.topWallProximity,
       proximities.rightWallProximity,
@@ -185,10 +192,14 @@ export default class Game extends Component {
     }
     const network = this.getCurrentNetwork()
     const result = network.activate(input)
+    // const _variance = variance(result)
+    // if (_variance < MINIMUM_VARIANCE) {
+    //   return null
+    // }
     network.score = this.state.playerScore
 
     const maxResult = max(result)
-    if (maxResult < 0.5) {
+    if (maxResult < 0.5 || maxResult > 1) {
       return null
     }
     const index = result.findIndex(element => element === maxResult)
@@ -456,7 +467,7 @@ export default class Game extends Component {
 
     return (
       <div style={this.style()}>
-        <AsyncComponent>
+        <div>
           <GameInfo
             playerScore={playerScore}
             timeElapsed={timeElapsed}
@@ -466,23 +477,25 @@ export default class Game extends Component {
             generation={this.neatNetwork.generation}
           />
 
-          <Board dimension={board * player}>
-            <Player
-              size={player}
-              position={playerPos}
-              handlePlayerMovement={this.handlePlayerMovement}
-            />
-
-            {this.state.positions.enemies.map(enemy => (
-              <Enemy
-                key={enemy.key}
+          <AsyncComponent>
+            <Board dimension={board * player}>
+              <Player
                 size={player}
-                info={enemy}
-                playerPosition={playerPos}
-                onCollide={this.handlePlayerCollision}
+                position={playerPos}
+                handlePlayerMovement={this.handlePlayerMovement}
               />
-            ))}
-          </Board>
+
+              {this.state.positions.enemies.map(enemy => (
+                <Enemy
+                  key={enemy.key}
+                  size={player}
+                  info={enemy}
+                  playerPosition={playerPos}
+                  onCollide={this.handlePlayerCollision}
+                />
+              ))}
+            </Board>
+          </AsyncComponent>
           {true && (
             <p style={{ position: 'fixed', bottom: 0, left: 16 }}>
               Debug:{' '}
@@ -499,9 +512,9 @@ export default class Game extends Component {
             <input
               type="range"
               defaultValue={INITIAL_GAME_SPEED}
-              min={INITIAL_GAME_SPEED}
+              min={0}
               max={1000}
-              step={0.001}
+              step={0.0001}
               onChange={this.handleGameSpeedChange}
             />
           </div>
@@ -516,19 +529,21 @@ export default class Game extends Component {
               <pre>Min: {Math.min(...this.networkScores)}</pre>
               <pre>
                 Network scores:{' \n'}
-                {chunk(this.networkScores, 10)
-                  .map(row => row.join(', '))
+                {ckmeans(this.networkScores, 5)
+                  .map(cluster => cluster.join(', '))
                   .join('\n')}
-              </pre>
-              <pre>
-                Sample input: {JSON.stringify(this.state.debugInput, null, 2)}
-              </pre>
-              <pre>
-                Sample result: {JSON.stringify(this.state.debugResult, null, 2)}
               </pre>
             </div>
           )}
-        </AsyncComponent>
+          <div>
+            <pre>
+              Sample input: {JSON.stringify(this.state.debugInput, null, 2)}
+            </pre>
+            <pre>
+              Sample result: {JSON.stringify(this.state.debugResult, null, 2)}
+            </pre>
+          </div>
+        </div>
       </div>
     )
   }

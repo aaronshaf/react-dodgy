@@ -6,7 +6,7 @@ class App extends Component {
   render() {
     return (
       <div className="App">
-        <Game boardSize={12} playerSize={25} />
+        <Game boardSize={15} playerSize={25} />
       </div>
     )
   }
