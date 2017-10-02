@@ -16,7 +16,7 @@ const AsyncComponent = React.unstable_AsyncComponent
 
 const PLAYER_AMOUNT = 20
 const INITIAL_GAME_SPEED = 0.0001
-const MUTATION_RATE = 0.25
+const MUTATION_RATE = 0.3
 const ELITISM_PERCENT = 0.1
 // let MINIMUM_VARIANCE = 0.000001
 
