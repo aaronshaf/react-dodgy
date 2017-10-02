@@ -5,11 +5,23 @@ import Player from './Player'
 import Enemy from './Enemy'
 import DebugState from './DebugState'
 import { UP, DOWN, LEFT, RIGHT } from './constants'
-import { pluck, getProximities } from './utils'
+import { pluck, getInputs } from './utils'
+import neataptic from 'neataptic'
+import max from 'lodash/max'
+import chunk from 'lodash/chunk'
+import uuid from 'uuid'
+
+const AsyncComponent = React.unstable_AsyncComponent
+
+const INITIAL_GAME_SPEED = 0.001
+const PLAYER_AMOUNT = 100
+const MUTATION_RATE = 0.05
+const ELITISM_PERCENT = 0.05
 
 const getDefaultState = ({ boardSize, playerSize, highScore = 0 }) => {
   const half = Math.floor(boardSize / 2) * playerSize
   return {
+    gameId: uuid.v1(),
     size: {
       board: boardSize,
       player: playerSize,
@@ -35,19 +47,48 @@ const getDefaultState = ({ boardSize, playerSize, highScore = 0 }) => {
 export default class Game extends Component {
   constructor(props) {
     super(props)
+    this.networkScores = []
     const { boardSize, playerSize } = props
-    this.state = getDefaultState({ boardSize, playerSize })
+    this.state = {
+      ...getDefaultState({ boardSize, playerSize }),
+      currentNetworkIndex: 0,
+      gameSpeed: INITIAL_GAME_SPEED
+    }
+    this.neatNetwork = new neataptic.Neat(8, 4, this.getFitness, {
+      popsize: PLAYER_AMOUNT,
+      mutationRate: MUTATION_RATE,
+      elitism: Math.round(ELITISM_PERCENT * PLAYER_AMOUNT)
+    })
+    // localStorage.clear()
+    if (localStorage.storedNeatNetwork) {
+      try {
+        const json = JSON.parse(localStorage.storedNeatNetwork)
+        this.neatNetwork.import(json)
+      } catch (error) {
+        console.error(error)
+      }
+    }
+    this.neatNetwork.generation++
+    this.neatNetwork.sort()
+  }
+
+  getFitness = network => {
+    return network.score
   }
 
   componentDidMount() {
     this.startGame()
-    this.fetchGlobalHighScore()
   }
 
   componentWillUnmount() {
-    clearInterval(this.state.gameInterval)
-    clearInterval(this.state.enemyInterval)
-    clearInterval(this.state.timeInterval)
+    this.clearIntervals()
+  }
+
+  clearIntervals = () => {
+    clearInterval(this.gameInterval)
+    clearInterval(this.enemyInterval)
+    clearInterval(this.timeInterval)
+    clearInterval(this.aiInterval)
   }
 
   placeEnemy = () => {
@@ -99,32 +140,127 @@ export default class Game extends Component {
     return newEnemy
   }
 
-  handlePlayerMovement = dirObj => {
+  getCurrentNetwork = () => {
+    return this.neatNetwork.population[this.state.currentNetworkIndex]
+  }
+
+  getNetworkInput = () => {
+    const { positions: { enemies }, size: { player, maxDim } } = this.state
+    const playerSize = this.state.size.player
+    const playerPosition = this.state.positions.player
+    const proximities = getInputs(
+      enemies,
+      playerPosition,
+      maxDim,
+      playerSize,
+      this.props.boardSize
+    )
+    const input = [
+      proximities.leftDanger,
+      proximities.topDanger,
+      proximities.rightDanger,
+      proximities.bottomDanger,
+      proximities.leftWallProximity,
+      proximities.topWallProximity,
+      proximities.rightWallProximity,
+      proximities.bottomWallProximity
+    ]
+
+    return input
+  }
+
+  handleAIMovement = () => {
+    const input = this.getNetworkInput()
+    // if (input.filter(a => a).length === 0) {
+    // return
+    // }
+
+    if (Math.random() < 0.0025) {
+      requestAnimationFrame(() => {
+        this.setState({
+          debugInput: input,
+          debugResult: result
+        })
+      })
+    }
+    const network = this.getCurrentNetwork()
+    const result = network.activate(input)
+    network.score = this.state.playerScore
+
+    const maxResult = max(result)
+    if (maxResult < 0.5) {
+      return null
+    }
+    const index = result.findIndex(element => element === maxResult)
+    const directionsByIndex = {
+      0: 'LEFT',
+      1: 'UP',
+      2: 'RIGHT',
+      3: 'DOWN'
+    }
+    this.handlePlayerMovement(
+      {
+        dir: directionsByIndex[index]
+      },
+      true
+    )
+  }
+
+  handlePlayerMovement = (dirObj, isAI = false) => {
     const { top, left } = this.state.positions.player
     const { player, maxDim } = this.state.size
+    let deltaLeft = 0
+    let deltaTop = 0
 
     // check walls
     switch (dirObj.dir) {
       case UP:
         if (top === 0) return
+        deltaTop = -1
         break
       case DOWN:
         if (top === maxDim - player) return
+        deltaTop = 1
         break
       case LEFT:
         if (left === 0) return
+        deltaLeft = -1
         break
       case RIGHT:
         if (left === maxDim - player) return
+        deltaLeft = 1
         break
     }
 
+    if (isAI === false) {
+      const input = this.getNetworkInput()
+      const output = [
+        deltaLeft === -1 ? 1 : 0,
+        deltaTop === -1 ? 1 : 0,
+        deltaLeft === 1 ? 1 : 0,
+        deltaTop === 1 ? 1 : 0
+      ]
+      const network = this.getCurrentNetwork()
+      network.evolve([{ input, output }], {
+        error: 0.2
+      })
+      setTimeout(() => {
+        this.setState({
+          debugInput: input,
+          debugResult: output
+        })
+      }, 5)
+    }
+    // getNetworkInput
+    // getCurrentNetwork
+
+    const gameId = this.state.gameId
     this.setState({
       positions: {
         ...this.state.positions,
         player: {
-          top: top + player * dirObj.top,
-          left: left + player * dirObj.left
+          top: top + player * deltaTop,
+          left: left + player * deltaLeft
         }
       }
     })
@@ -135,9 +271,23 @@ export default class Game extends Component {
   }
 
   startGame = () => {
-    this.enemyInterval = setInterval(this.updateEnemyPositions, 50)
-    this.timeInterval = setInterval(this.updateGame, 1000)
-    this.gameInterval = setInterval(this.updateEnemiesInPlay, 250)
+    this.setIntervals()
+  }
+
+  setIntervals = () => {
+    this.enemyInterval = setInterval(
+      this.updateEnemyPositions,
+      this.state.gameSpeed * 1
+    )
+    this.timeInterval = setInterval(this.updateGame, this.state.gameSpeed * 20)
+    this.gameInterval = setInterval(
+      this.updateEnemiesInPlay,
+      this.state.gameSpeed * 5
+    )
+    this.aiInterval = setInterval(
+      this.handleAIMovement,
+      this.state.gameSpeed * 5
+    )
   }
 
   updateGame = () => {
@@ -166,13 +316,6 @@ export default class Game extends Component {
     } = this.state
     const playerSize = this.state.size.player
     const playerPosition = this.state.positions.player
-
-    const proximities = getProximities(
-      enemies,
-      playerPosition,
-      maxDim,
-      playerSize
-    )
 
     this.setState({
       positions: {
@@ -242,18 +385,25 @@ export default class Game extends Component {
     })
   }
 
-  resetGame = () => {
+  resetGame = async () => {
+    const currentNetworkIndex = this.state.currentNetworkIndex
     const { boardSize, playerSize } = this.props
     const { playerScore, highScore, globalHighScore, debug } = this.state
 
     // clear intervals
-    clearInterval(this.gameInterval)
-    clearInterval(this.enemyInterval)
-    clearInterval(this.timeInterval)
+    this.clearIntervals()
 
-    // if high score is higher than global high score, update it
-    if (playerScore > globalHighScore) {
-      this.updateGlobalHighScore(playerScore)
+    if (currentNetworkIndex >= PLAYER_AMOUNT - 1) {
+      if (this.neatNetwork.generation > 1) {
+        const networkScores = this.neatNetwork.population
+          .map((network, index) => network.score)
+          .filter(a => a)
+        networkScores.sort((a, b) => (a < b ? -1 : 1))
+        networkScores.reverse()
+        this.networkScores = networkScores
+      }
+      await this.neatNetwork.evolve()
+      localStorage.storedNeatNetwork = JSON.stringify(this.neatNetwork.export())
     }
 
     // reset state
@@ -262,7 +412,9 @@ export default class Game extends Component {
       // persist debug state and high scores
       debug,
       highScore: playerScore > highScore ? playerScore : highScore,
-      globalHighScore
+      globalHighScore,
+      currentNetworkIndex:
+        currentNetworkIndex >= PLAYER_AMOUNT - 1 ? 0 : currentNetworkIndex + 1
     })
     // restart game
     this.startGame()
@@ -274,36 +426,19 @@ export default class Game extends Component {
     })
   }
 
-  fetchGlobalHighScore = () => {
-    // axios.get(url)
-    //     .then(data => {
-    //         this.setState({
-    //             globalHighScore: data.data.fields.global_high_score
-    //         })
-    //     })
-    //     .catch(err => console.warn(err))
-  }
-
-  updateGlobalHighScore = highScore => {
-    // axios.patch(url, {
-    //     "fields": {
-    //         "global_high_score": highScore
-    //     }
-    // })
-    // .then(data => {
-    //     this.setState({
-    //         globalHighScore: data.data.fields.global_high_score
-    //     });
-    // })
-    // .catch(err => console.warn(err))
-  }
-
   style = () => {
     return {
       width: '85%',
       maxWidth: '600px',
       margin: '0 auto'
     }
+  }
+
+  handleGameSpeedChange = event => {
+    this.setState({ gameSpeed: event.target.value }, () => {
+      this.clearIntervals()
+      this.setIntervals()
+    })
   }
 
   render() {
@@ -316,43 +451,84 @@ export default class Game extends Component {
       globalHighScore
     } = this.state
 
+    const sum = this.networkScores.reduce((state, score) => state + score, 0)
+    const average = sum / (this.networkScores.length || 1)
+
     return (
       <div style={this.style()}>
-        <GameInfo
-          playerScore={playerScore}
-          timeElapsed={timeElapsed}
-          highScore={highScore}
-          globalHighScore={globalHighScore}
-        />
-
-        <Board dimension={board * player}>
-          <Player
-            size={player}
-            position={playerPos}
-            handlePlayerMovement={this.handlePlayerMovement}
+        <AsyncComponent>
+          <GameInfo
+            playerScore={playerScore}
+            timeElapsed={timeElapsed}
+            highScore={highScore}
+            globalHighScore={globalHighScore}
+            currentNetworkIndex={this.state.currentNetworkIndex}
+            generation={this.neatNetwork.generation}
           />
 
-          {this.state.positions.enemies.map(enemy => (
-            <Enemy
-              key={enemy.key}
+          <Board dimension={board * player}>
+            <Player
               size={player}
-              info={enemy}
-              playerPosition={playerPos}
-              onCollide={this.handlePlayerCollision}
+              position={playerPos}
+              handlePlayerMovement={this.handlePlayerMovement}
             />
-          ))}
-        </Board>
-        {true && (
-          <p style={{ position: 'fixed', bottom: 0, left: 16 }}>
-            Debug:{' '}
+
+            {this.state.positions.enemies.map(enemy => (
+              <Enemy
+                key={enemy.key}
+                size={player}
+                info={enemy}
+                playerPosition={playerPos}
+                onCollide={this.handlePlayerCollision}
+              />
+            ))}
+          </Board>
+          {true && (
+            <p style={{ position: 'fixed', bottom: 0, left: 16 }}>
+              Debug:{' '}
+              <input
+                type="checkbox"
+                onChange={this.handleDebugToggle}
+                ref={n => (this.debug = n)}
+              />
+            </p>
+          )}
+          {this.state.debug && <DebugState data={this.state} />}
+          <div>
+            Game speed:
             <input
-              type="checkbox"
-              onChange={this.handleDebugToggle}
-              ref={n => (this.debug = n)}
+              type="range"
+              defaultValue={INITIAL_GAME_SPEED}
+              min={INITIAL_GAME_SPEED}
+              max={1000}
+              step={0.001}
+              onChange={this.handleGameSpeedChange}
             />
-          </p>
-        )}
-        {this.state.debug && <DebugState data={this.state} />}
+          </div>
+          {average > 0 && (
+            <div>
+              <pre>Max: {Math.max(...this.networkScores)}</pre>
+              <pre>
+                Median:{' '}
+                {this.networkScores[Math.floor(this.networkScores.length / 2)]}
+              </pre>
+              <pre>Mean: {Math.round(average)}</pre>
+              <pre>Min: {Math.min(...this.networkScores)}</pre>
+              <pre>
+                Network scores:{' \n'}
+                {chunk(this.networkScores, 10)
+                  .map(row => row.join(', '))
+                  .join('\n')}
+              </pre>
+              <pre>
+                Sample input: {JSON.stringify(this.state.debugInput, null, 2)}
+              </pre>
+              <pre>
+                Sample result: {JSON.stringify(this.state.debugResult, null, 2)}
+              </pre>
+            </div>
+          )}
+        </AsyncComponent>
       </div>
     )
   }

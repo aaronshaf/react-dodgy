@@ -1,4 +1,4 @@
 .Square {
   position: absolute;
-  transition: transform 0.1s ease;
+  /*transition: left 0.1s ease, top 0.1s ease, transform 0.1s ease;*/
 }

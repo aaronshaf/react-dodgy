@@ -8,10 +8,9 @@ const style = ({ size, position, color }) => {
     height: dim,
     backgroundColor: color,
     position: 'absolute',
-    // top: position.top + 'px',
-    // left: position.left + 'px',
-    transform: `translateX(${position.left}px) translateY(${position.top}px)`,
-    transition: 'all 0.1s ease'
+    top: position.top + 'px',
+    left: position.left + 'px'
+    // transform: `translateX(${position.left}px) translateY(${position.top}px)`
   }
 }
 
