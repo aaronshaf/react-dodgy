@@ -6,11 +6,13 @@ import Enemy from './Enemy'
 import DebugState from './DebugState'
 import { UP, DOWN, LEFT, RIGHT } from './constants'
 import { pluck, getInputs } from './utils'
-import neataptic from 'neataptic'
+// import neataptic from 'neataptic'
 import max from 'lodash/max'
 import chunk from 'lodash/chunk'
 import uuid from 'uuid'
 import { ckmeans } from 'simple-statistics'
+
+const neataptic = window.neataptic
 
 const AsyncComponent = React.unstable_AsyncComponent
 
