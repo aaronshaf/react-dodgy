@@ -14,10 +14,11 @@ import { ckmeans } from 'simple-statistics'
 
 const AsyncComponent = React.unstable_AsyncComponent
 
-const PLAYER_AMOUNT = 20
-const INITIAL_GAME_SPEED = 0.0001
-const MUTATION_RATE = 0.3
-const ELITISM_PERCENT = 0.1
+// localStorage.clear()
+const PLAYER_AMOUNT = 50
+const INITIAL_GAME_SPEED = 2
+const MUTATION_RATE = 0.2
+const ELITISM = 0.2
 // let MINIMUM_VARIANCE = 0.000001
 
 const getDefaultState = ({ boardSize, playerSize, highScore = 0 }) => {
@@ -49,6 +50,7 @@ const getDefaultState = ({ boardSize, playerSize, highScore = 0 }) => {
 export default class Game extends Component {
   constructor(props) {
     super(props)
+    this.playerScore = 0
     this.networkScores = []
     const { boardSize, playerSize } = props
     this.state = {
@@ -56,11 +58,28 @@ export default class Game extends Component {
       currentNetworkIndex: 0,
       gameSpeed: INITIAL_GAME_SPEED
     }
-    this.neatNetwork = new neataptic.Neat(12, 4, this.getFitness, {
+    // const methods = neataptic.methods
+    // console.debug(methods)
+    this.neatNetwork = new neataptic.Neat(4, 4, this.getFitness, {
+      // mutation: [
+      //   methods.mutation.ADD_NODE,
+      //   methods.mutation.SUB_NODE,
+      //   methods.mutation.ADD_CONN,
+      //   methods.mutation.SUB_CONN,
+      //   methods.mutation.MOD_WEIGHT,
+      //   methods.mutation.MOD_BIAS,
+      //   methods.mutation.MOD_ACTIVATION,
+      //   methods.mutation.ADD_GATE,
+      //   methods.mutation.SUB_GATE,
+      //   methods.mutation.ADD_SELF_CONN,
+      //   methods.mutation.SUB_SELF_CONN,
+      //   methods.mutation.ADD_BACK_CONN,
+      //   methods.mutation.SUB_BACK_CONN
+      // ],
       popsize: PLAYER_AMOUNT,
       mutationRate: MUTATION_RATE,
-      elitism: Math.round(ELITISM_PERCENT * PLAYER_AMOUNT),
-      selection: neataptic.methods.selection.FITNESS_PROPORTIONATE
+      elitism: Math.round(ELITISM * PLAYER_AMOUNT)
+      // selection: neataptic.methods.selection.FITNESS_PROPORTIONATE
       // equal: true
     })
     if (localStorage.storedNeatNetwork) {
@@ -159,18 +178,14 @@ export default class Game extends Component {
       this.props.boardSize
     )
     const input = [
-      proximities.directLeftDanger,
-      proximities.directTopDanger,
-      proximities.directRightDanger,
-      proximities.directBottomDanger,
-      proximities.indirectLeftDanger,
-      proximities.indirectTopDanger,
-      proximities.indirectRightDanger,
-      proximities.indirectBottomDanger,
-      proximities.leftWallProximity,
-      proximities.topWallProximity,
-      proximities.rightWallProximity,
-      proximities.bottomWallProximity
+      proximities.leftDanger,
+      proximities.topDanger,
+      proximities.rightDanger,
+      proximities.bottomDanger
+      // proximities.leftWallProximity,
+      // proximities.topWallProximity,
+      // proximities.rightWallProximity,
+      // proximities.bottomWallProximity
     ]
 
     return input
@@ -196,7 +211,7 @@ export default class Game extends Component {
     // if (_variance < MINIMUM_VARIANCE) {
     //   return null
     // }
-    network.score = this.state.playerScore
+    network.score = this.playerScore
 
     const maxResult = max(result)
     if (maxResult < 0.5 || maxResult > 1) {
@@ -282,7 +297,16 @@ export default class Game extends Component {
   }
 
   startGame = () => {
+    // requestAnimationFrame(this.process)
     this.setIntervals()
+  }
+
+  process = () => {
+    this.updateEnemyPositions()
+    this.updateGame()
+    this.updateEnemiesInPlay()
+    this.handleAIMovement()
+    requestAnimationFrame(this.process)
   }
 
   setIntervals = () => {
@@ -375,10 +399,11 @@ export default class Game extends Component {
 
   updateTimeAndScore = () => {
     const { timeElapsed, playerScore, baseScore } = this.state
+    this.playerScore = this.playerScore + baseScore
 
     this.setState({
       timeElapsed: timeElapsed + 1,
-      playerScore: playerScore + baseScore
+      playerScore: this.playerScore
     })
   }
 
@@ -400,6 +425,7 @@ export default class Game extends Component {
     const currentNetworkIndex = this.state.currentNetworkIndex
     const { boardSize, playerSize } = this.props
     const { playerScore, highScore, globalHighScore, debug } = this.state
+    this.playerScore = 0
 
     // clear intervals
     this.clearIntervals()
@@ -527,12 +553,14 @@ export default class Game extends Component {
               </pre>
               <pre>Mean: {Math.round(average)}</pre>
               <pre>Min: {Math.min(...this.networkScores)}</pre>
-              <pre>
-                Network scores:{' \n'}
-                {ckmeans(this.networkScores, 5)
-                  .map(cluster => cluster.join(', '))
-                  .join('\n')}
-              </pre>
+              {this.networkScores.length > 5 && (
+                <pre>
+                  Network scores:{' \n'}
+                  {ckmeans(this.networkScores, 5)
+                    .map(cluster => cluster.join(', '))
+                    .join('\n')}
+                </pre>
+              )}
             </div>
           )}
           <div>

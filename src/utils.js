@@ -101,40 +101,36 @@ export function getInputs(
 
     return {
       ...state,
-      directLeftDanger: Math.max(state.directLeftDanger, directLeftDanger),
-      directTopDanger: Math.max(state.directTopDanger, directTopDanger),
-      directRightDanger: Math.max(state.directRightDanger, directRightDanger),
-      directBottomDanger: Math.max(
-        state.directBottomDanger,
-        directBottomDanger
-      ),
-      indirectLeftDanger: Math.max(
-        state.indirectLeftDanger,
+      leftDanger: Math.max(
+        state.directLeftDanger,
+        directLeftDanger,
         indirectLeftDanger
       ),
-      indirectTopDanger: Math.max(state.indirectTopDanger, indirectTopDanger),
-      indirectRightDanger: Math.max(
-        state.indirectRightDanger,
+      topDanger: Math.max(
+        state.directTopDanger,
+        directTopDanger,
+        indirectTopDanger
+      ),
+      rightDanger: Math.max(
+        state.directRightDanger,
+        directRightDanger,
         indirectRightDanger
       ),
-      indirectBottomDanger: Math.max(
-        state.indirectBottomDanger,
+      bottomDanger: Math.max(
+        state.directBottomDanger,
+        directBottomDanger,
         indirectBottomDanger
       )
     }
   }, {
-    directLeftDanger: 0,
-    directTopDanger: 0,
-    directRightDanger: 0,
-    directBottomDanger: 0,
-    indirectLeftDanger: 0,
-    indirectTopDanger: 0,
-    indirectRightDanger: 0,
-    indirectBottomDanger: 0,
-    leftWallProximity: (maxDim - playerPosition.left) / maxDim,
-    topWallProximity: (maxDim - playerPosition.top) / maxDim,
-    rightWallProximity: (playerPosition.left + playerSize) / maxDim,
-    bottomWallProximity: (playerPosition.top + playerSize) / maxDim
+    directLeftDanger: (maxDim - playerPosition.left) / maxDim,
+    directTopDanger: (maxDim - playerPosition.top) / maxDim,
+    directRightDanger: (playerPosition.left + playerSize) / maxDim,
+    directBottomDanger: (playerPosition.top + playerSize) / maxDim
+    // leftWallProximity: (maxDim - playerPosition.left) / maxDim,
+    // topWallProximity: (maxDim - playerPosition.top) / maxDim,
+    // rightWallProximity: (playerPosition.left + playerSize) / maxDim,
+    // bottomWallProximity: (playerPosition.top + playerSize) / maxDim
   })
 }
 
