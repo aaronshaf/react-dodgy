@@ -12,7 +12,7 @@ import chunk from 'lodash/chunk'
 import uuid from 'uuid'
 import { ckmeans } from 'simple-statistics'
 
-const neataptic = window.neataptic // trigger
+const neataptic = window.neataptic
 
 const AsyncComponent = React.unstable_AsyncComponent
 
